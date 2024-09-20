@@ -1,0 +1,136 @@
+---
+#################################
+# Authentication
+#################################
+- name: Check if gcloud is already authenticated
+  command: gcloud auth list
+  register: auth_list
+  changed_when: false
+  failed_when: "'No credentialed accounts' in auth_list.stdout"
+
+- name: Authenticate with gcloud if not logged in
+  command: gcloud auth login --brief
+  when: "'No credentialed accounts' in auth_list.stdout"
+
+#################################
+# Organization Setup
+#################################
+- name: Use provided organization ID if available
+  set_fact:
+    organization_id: "{{ gcp_organization }}"
+  when: gcp_organization != ''
+
+- name: List and select organization if not provided
+  block:
+    - name: List GCP Organizations
+      command: gcloud organizations list --format="value(ID,DISPLAY_NAME)"
+      register: gcp_organizations
+      changed_when: false
+
+    - name: Display GCP Organizations
+      debug:
+        msg: "{{ gcp_organizations.stdout_lines }}"
+
+    - name: Prompt user to select an organization
+      ansible.builtin.pause:
+        prompt: |
+          Please select an organization by entering its number:
+          {% for org in gcp_organizations.stdout_lines %}
+          {{ loop.index }}. {{ org }}
+          {% endfor %}
+      register: org_selection
+
+    - name: Set selected organization
+      set_fact:
+        selected_org: "{{ gcp_organizations.stdout_lines[org_selection.user_input|int - 1] }}"
+
+    - name: Display selected organization
+      debug:
+        msg: "Selected organization: {{ selected_org }}"
+
+    - name: Set organization ID
+      set_fact:
+        organization_id: "{{ selected_org.split()[0] }}"
+  when: gcp_organization == ''
+
+- name: Display organization ID
+  debug:
+    msg: "Organization ID: {{ organization_id }}"
+- name: Check if system name is provided
+  set_fact:
+    system_name_provided: "{{ system_name | default('') | length > 0 }}"
+
+- name: Ask for system name if not provided
+  pause:
+    prompt: "Please enter the system name"
+  register: system_name_input
+  when: not system_name_provided
+
+- name: Set system name
+  set_fact:
+    system_name: "{{ system_name_input.user_input | default(system_name) }}"
+
+
+#################################
+# User Setup
+#################################
+- name: Get user email
+  command: gcloud config get-value account
+  register: gcloud_account
+  changed_when: false
+
+- name: Set user email variable
+  set_fact:
+    user_email: "{{ gcloud_account.stdout | trim }}"
+
+- name: Display user email
+  debug:
+    msg: "User email: {{ user_email }}"
+
+- name: Ask for system name if not provided
+  pause:
+    prompt: "Please enter the system name"
+  register: system_name_input
+  when: system_name == ''
+
+
+#################################
+# UUID Suffix
+#################################
+
+- name: Generate a unique suffix for naming convention
+  shell: uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8
+  register: uuid_generation_result
+  when: uuid_suffix is not defined or uuid_suffix | length == 0
+  changed_when: uuid_suffix is not defined or uuid_suffix | length == 0
+
+- name: Set the UUID suffix as a fact
+  set_fact:
+    uuid_suffix: "{{ uuid_generation_result.stdout | trim }}"
+  when: uuid_suffix is not defined or uuid_suffix | length == 0
+
+- name: Display UUID suffix
+  debug:
+    msg: "UUID suffix: {{ uuid_suffix }}"
+
+- name: Install gcloud beta components
+  command: gcloud components install beta
+  register: install_beta_result
+  changed_when: install_beta_result.rc == 0
+  failed_when: install_beta_result.rc != 0
+
+- name: Display gcloud beta installation result
+  debug:
+    msg: "gcloud beta components installed successfully"
+  when: install_beta_result.changed
+
+- name: Ensure gcloud beta components are up to date
+  command: gcloud components update
+  register: update_components_result
+  changed_when: update_components_result.rc == 0
+  failed_when: update_components_result.rc != 0
+
+- name: Display gcloud components update result
+  debug:
+    msg: "gcloud components updated successfully"
+  when: update_components_result.changed
