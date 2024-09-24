@@ -38,3 +38,6 @@ terraform.rc
 
 # Ignore vars.yml
 vars.yml
+
+*.pem
+*.pem.pub
