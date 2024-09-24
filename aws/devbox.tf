@@ -13,6 +13,15 @@ resource "aws_security_group_rule" "devbox_ingress_ssh" {
     cidr_blocks = ["0.0.0.0/0"]  // Allow SSH access from any IP address
 }
 
+resource "aws_security_group_rule" "devbox_ingress_proxy" {
+    security_group_id = aws_security_group.devbox.id
+    type = "ingress"
+    from_port = 8888
+    to_port = 8888
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+}
+
 resource "aws_security_group_rule" "devbox_egress_all" {
     security_group_id = aws_security_group.devbox.id
     type = "egress"
