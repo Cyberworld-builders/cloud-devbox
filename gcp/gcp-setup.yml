@@ -1,0 +1,27 @@
+---
+- name: Configure Service Account
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    gcp_organization: "{{ org_id | default('') }}"
+    system_name: "{{ sys_name | default('') }}"
+    billing_account_id: "{{ billing_id | default('') }}"
+    uuid_suffix: "{{ uuid | default('') }}"
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - include_tasks: ./tasks/gcp-start.yml
+    - include_tasks: ./tasks/gcp-billing.yml
+    - include_tasks: ./tasks/gcp-service-account.yml
+
+    - name: Re-write vars.yml with updated values
+      ansible.builtin.copy:
+        content: |
+          org_id: "{{ organization_id }}"
+          sys_name: "{{ system_name }}"
+          billing_id: "{{ billing_account_id }}"
+          uuid: "{{ uuid_suffix }}"
+        dest: "{{ playbook_dir }}/vars.yml"
+      delegate_to: localhost

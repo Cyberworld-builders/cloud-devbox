@@ -1,0 +1,38 @@
+---
+- name: List and select billing account if not provided
+  block:
+    - name: List GCP Billing Accounts
+      command: gcloud beta billing accounts list --format="value(ACCOUNT_ID,NAME)"
+      register: billing_accounts
+      changed_when: false
+
+    - name: Display GCP Billing Accounts
+      debug:
+        msg: "{{ billing_accounts.stdout_lines }}"
+
+    - name: Prompt user to select a billing account
+      ansible.builtin.pause:
+        prompt: |
+          Please select a billing account by entering its number:
+          {% for account in billing_accounts.stdout_lines %}
+          {{ loop.index }}. {{ account }}
+          {% endfor %}
+      register: billing_selection
+    
+    - name: Set selected billing account
+      set_fact:
+        selected_billing_account: "{{ billing_accounts.stdout_lines[billing_selection.user_input|int - 1] }}"
+
+    - name: Display selected billing account
+      debug:
+        msg: "Selected billing account: {{ selected_billing_account }}"
+
+    - name: Set billing account ID
+      set_fact:
+        billing_account_id: "{{ selected_billing_account.split()[0] }}"
+
+  when: billing_account_id == ''
+
+- name: Display billing account ID
+  debug:
+    msg: "Billing account ID: {{ billing_account_id }}"

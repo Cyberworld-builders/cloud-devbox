@@ -1,0 +1,203 @@
+---
+- name: Setup AWS Devbox
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars.yml
+  tasks:
+
+    - name: Create terraform.tfvars file if it doesn't exist
+      ansible.builtin.file:
+        path: terraform.tfvars
+        state: touch
+      when: not ansible_check_mode
+
+    ############################################################
+    # UUID Suffix
+    ############################################################
+
+    - name: Read vars.yml
+      include_vars:
+        file: vars.yml
+
+    - name: Generate and set UUID if not already set
+      block:
+        - name: Generate UUID
+          command: uuidgen
+          register: uuid
+
+        - name: Generate short UUID
+          set_fact:
+            short_uuid: "{{ uuid.stdout | lower | regex_replace('[^a-z0-9]', '') | truncate(8, True, '') }}"
+
+        - name: Set UUID in vars.yml
+          lineinfile:
+            path: vars.yml
+            regexp: '^uuid_suffix:'
+            line: "uuid_suffix: {{ short_uuid }}"
+      when: uuid_suffix is not defined or uuid_suffix | length == 0
+
+    - name: Set short_uuid fact
+      set_fact:
+        short_uuid: "{{ uuid_suffix }}"
+
+    - name: Write short_uuid to terraform.tfvars
+      ansible.builtin.lineinfile:
+        path: terraform.tfvars
+        regexp: '^uuid_suffix:'
+        line: "uuid_suffix = \"{{ short_uuid }}\""
+      when: not ansible_check_mode
+
+    ############################################################
+    # System Name
+    ############################################################
+
+    - name: Read system_name from vars.yml
+      include_vars:
+        file: vars.yml
+        name: vars_yml_contents
+
+    - name: Check if system_name is set in vars.yml
+      set_fact:
+        system_name: "{{ vars_yml_contents.sys_name | default('') }}"
+
+    - name: Prompt for system name if not set
+      pause:
+        prompt: "Please enter a system name"
+      register: user_input
+      when: system_name | length == 0
+
+    - name: Set system_name from user input
+      set_fact:
+        system_name: "{{ user_input.user_input }}"
+      when: system_name | length == 0
+
+    - name: Update vars.yml with system_name
+      lineinfile:
+        path: vars.yml
+        regexp: '^sys_name:'
+        line: "sys_name: {{ system_name }}"
+      when: system_name | length > 0
+
+    - name: Write system_name to terraform.tfvars
+      ansible.builtin.lineinfile:
+        path: terraform.tfvars
+        regexp: '^system_name ='
+        line: 'system_name = "{{ system_name }}"'
+      when: system_name | length > 0
+
+    - name: Generate a system id from the system name
+      set_fact:
+        system_id: "{{ system_name | lower | regex_replace('[^a-z0-9]', '-') | regex_replace('-+', '-') | regex_replace('^-|-$', '') | truncate(8, True, '') }}"
+
+    - name: Write system_id to terraform.tfvars
+      ansible.builtin.lineinfile:
+        path: terraform.tfvars
+        regexp: '^system_id ='
+        line: 'system_id = "{{ system_id }}"'
+
+    - name: Write system_id to vars.yml
+      ansible.builtin.lineinfile:
+        path: vars.yml
+        regexp: '^system_id:'
+        line: 'system_id: "{{ system_id }}"'
+
+    ############################################################
+    # AWS Info
+    ############################################################
+
+    - name: Check if account id is set in vars.yml
+      set_fact:
+        account_id: "{{ vars_yml_contents.account_id | default('') }}"
+
+    - name: Retrieve account id from AWS if not set
+      block:
+        - name: Get AWS account ID
+          shell: aws sts get-caller-identity --query Account --output text
+          register: aws_account_id
+        - name: Set account_id fact
+          set_fact:
+            account_id: "{{ aws_account_id.stdout | trim }}"
+      when: account_id | length == 0
+
+    - name: Display account id
+      debug:
+        var: account_id
+
+    - name: Update vars.yml with account_id
+      lineinfile:
+        path: vars.yml
+        regexp: '^account_id:'
+        line: "account_id: {{ account_id }}"
+      when: vars_yml_contents.account_id is not defined or vars_yml_contents.account_id == 0
+
+    - name: Write account id to terraform.tfvars
+      ansible.builtin.lineinfile:
+        path: terraform.tfvars
+        regexp: '^account_id ='
+        line: 'account_id = "{{ account_id }}"'
+
+  ############################################################
+  # Create an IAM user for the Dev Box
+  ############################################################
+
+    - name: Check if IAM user for Dev Box exists
+      command: aws iam get-user --user-name {{ system_id }}
+      register: check_user
+      ignore_errors: true
+
+    - name: Create IAM user for Dev Box if not exists
+      command: aws iam create-user --user-name {{ system_id }}
+      register: create_user
+      when: check_user.rc != 0
+
+    - name: Display user details
+      debug:
+        var: create_user.stdout | default('User already exists')
+    - name: Check if SSH key pair exists
+      stat:
+        path: "./{{ system_id }}-{{ short_uuid }}.pem"
+      register: key_file
+
+    - name: Generate SSH key pair
+      openssh_keypair:
+        path: "./{{ system_id }}-{{ short_uuid }}.pem"
+        type: rsa
+        size: 4096
+        state: present
+        force: no
+      register: ssh_key
+      when: not key_file.stat.exists
+
+    - name: Display public key
+      debug:
+        var: ssh_key.public_key
+      when: not key_file.stat.exists
+
+    - name: Read existing public key
+      command: cat "./{{ system_id }}-{{ short_uuid }}.pem.pub"
+      register: existing_public_key
+      when: key_file.stat.exists
+
+    - name: Display existing public key
+      debug:
+        var: existing_public_key.stdout
+      when: key_file.stat.exists
+
+    - name: Check for the existence of the key pair in EC2
+      command: aws ec2 describe-key-pairs --filters "Name=key-name,Values={{ system_id }}"
+      register: key_pair_exists
+      ignore_errors: true
+
+    - name: Display key pair exists
+      debug:
+        var: key_pair_exists.stdout
+
+    - name: Import the key pair into EC2
+      command: aws ec2 import-key-pair --key-name {{ system_id }}-{{ short_uuid }} --public-key-material fileb://./{{ system_id }}-{{ short_uuid }}.pem.pub
+      when: (key_pair_exists.stdout | from_json).KeyPairs | length == 0
+
+    ####################################
+    # Create an s3 bucket for state
+    ####################################
+
