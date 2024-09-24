@@ -41,3 +41,5 @@ vars.yml
 
 *.pem
 *.pem.pub
+
+inventory.ini
