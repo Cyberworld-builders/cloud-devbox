@@ -69,6 +69,13 @@ resource "aws_iam_role_policy" "devbox" {
     })
 }   
 
+resource "aws_eip" "devbox" {}
+
+resource "aws_eip_association" "devbox" {
+    instance_id = aws_instance.devbox.id
+    allocation_id = aws_eip.devbox.id
+}
+
 resource "aws_instance" "devbox" {
     ami = var.ubuntu_20_04_ami
     instance_type = "t2.micro"
@@ -76,7 +83,6 @@ resource "aws_instance" "devbox" {
     subnet_id = var.public_subnet_id
     iam_instance_profile = aws_iam_instance_profile.devbox.name
     key_name = "${var.system_id}-${var.uuid_suffix}"
-    associate_public_ip_address = true
     user_data = file("userdata.sh")
     tags = {
         Name = "${var.system_id}-${var.uuid_suffix}"
