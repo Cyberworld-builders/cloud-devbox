@@ -1,0 +1,20 @@
+---
+- name: Provision Dev Box
+  hosts: nooch
+  become: yes
+  tasks:
+    - name: Install AWS CLI
+      apt:
+        name: awscli
+        state: present
+        update_cache: yes
+    - name: Install Tinyproxy
+      apt:
+        name: tinyproxy
+        state: present
+        update_cache: yes
+    - name: Configure Tinyproxy
+      template:
+        src: tinyproxy.conf.j2
+        dest: /etc/tinyproxy/tinyproxy.conf
+        
