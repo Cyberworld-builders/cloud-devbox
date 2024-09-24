@@ -12,9 +12,9 @@
     - vars.yml
 
   tasks:
-    - include_tasks: ./tasks/start.yml
-    - include_tasks: ./tasks/billing.yml
-    - include_tasks: ./tasks/service-account.yml
+    - include_tasks: ./tasks/gcp-start.yml
+    - include_tasks: ./tasks/gcp-billing.yml
+    - include_tasks: ./tasks/gcp-service-account.yml
 
     - name: Re-write vars.yml with updated values
       ansible.builtin.copy:
