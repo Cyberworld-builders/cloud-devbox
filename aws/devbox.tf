@@ -4,14 +4,44 @@ resource "aws_security_group" "devbox" {
     # tags = local.tags
 }
 
-# resource "aws_security_group_rule" "devbox_ingress_ssh" {
-#     security_group_id = aws_security_group.devbox.id
-#     type = "ingress"
-#     from_port = 22
-#     to_port = 22
-#     protocol = "tcp"
-#     cidr_blocks = ["0.0.0.0/0"]  // Allow SSH access from any IP address
-# }
+resource "aws_security_group_rule" "devbox_ingress_ssh" {
+    security_group_id = aws_security_group.devbox.id
+    type = "ingress"
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  // Allow SSH access from any IP address
+}
+
+resource "aws_security_group_rule" "devbox_ingress_vpn" {
+    security_group_id = aws_security_group.devbox.id
+    type = "ingress"
+    from_port = 443
+    to_port = 443
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+}
+
+resource "aws_security_group_rule" "devbox_ingress_http" {
+    security_group_id = aws_security_group.devbox.id
+    type = "ingress"
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+}
+
+resource "aws_security_group_rule" "devbox_ingress_ephemeral" {
+    security_group_id = aws_security_group.devbox.id
+    type              = "ingress"
+    from_port         = 1024
+    to_port           = 65535
+    protocol          = "tcp"
+    cidr_blocks       = ["0.0.0.0/0"]
+    description       = "Allow inbound traffic on ephemeral ports"
+}
+
+
 
 resource "aws_security_group_rule" "devbox_ingress_proxy" {
     security_group_id = aws_security_group.devbox.id
