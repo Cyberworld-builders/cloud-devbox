@@ -7,6 +7,20 @@
     - vars/main.yml
 
   tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: install pip
+      apt:
+        name: python3-pip
+        state: present
+
+    - name: install libffi7
+      apt:
+        name: libffi7
+        state: present
+
     - name: Check to see if MongoDB is installed and enabled
       command: which mongod
       register: mongo_path
@@ -104,3 +118,25 @@
         - name: Display error if installation fails
           debug:
             msg: "Failed to install Pritunl. Please check your system configuration and network connection."
+
+    - name: Enable Pritunl service
+      service:
+        name: pritunl
+        enabled: yes
+        state: started
+      become: yes
+      when: pritunl_status or not ansible_check_mode
+
+    - name: Verify Pritunl service status
+      command: service pritunl status
+      register: pritunl_service_status
+      become: yes
+      when: pritunl_status or not ansible_check_mode
+
+    - name: Display Pritunl service status
+      debug:
+        var: pritunl_service_status
+      when: pritunl_status or not ansible_check_mode
+
+
+
