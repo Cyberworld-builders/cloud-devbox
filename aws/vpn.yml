@@ -61,3 +61,46 @@
           debug:
             msg: "Failed to install MongoDB. Please check your system configuration and network connection."
 
+    - name: Check if Pritunl is installed
+      command: which pritunl
+      register: pritunl_path
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Set pritunl_status based on command output
+      set_fact:
+        pritunl_status: "{{ pritunl_path.stdout | length > 0 }}"
+
+    - name: Display Pritunl status
+      debug:
+        var: pritunl_status
+
+    - name: Configure Pritunl repository and install
+      become: yes
+      when: not pritunl_status
+      block:
+        - name: Install software-properties-common
+          apt:
+            name: software-properties-common
+            state: present
+            update_cache: yes
+
+        - name: Add Pritunl repository
+          apt_repository:
+            repo: deb https://repo.pritunl.com/stable/apt focal main
+            state: present
+            filename: pritunl.list
+
+        - name: Update apt cache
+          apt:
+            update_cache: yes
+
+        - name: Install Pritunl
+          apt:
+            name: pritunl
+            state: present
+
+      rescue:
+        - name: Display error if installation fails
+          debug:
+            msg: "Failed to install Pritunl. Please check your system configuration and network connection."
