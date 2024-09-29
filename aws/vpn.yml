@@ -1,0 +1,63 @@
+---
+- name: Configure VPN Connection
+  hosts: nooch
+  remote_user: ubuntu
+  become: yes
+  vars_files:
+    - vars/main.yml
+
+  tasks:
+    - name: Check to see if MongoDB is installed and enabled
+      command: which mongod
+      register: mongo_path
+      ignore_errors: true
+
+    - name: Set mongo_status based on command output
+      set_fact:
+        mongo_status: "{{ mongo_path.stdout | length > 0 }}"
+
+    - name: Display MongoDB status
+      debug:
+        var: mongo_status
+
+    - name: Configure MongoDB repository and install
+      become: yes
+      when: not mongo_status
+      block:
+        - name: Add libssl1.1 repository
+          apt_repository:
+            repo: deb http://security.ubuntu.com/ubuntu focal-security main
+            state: present
+            filename: focal-security.list
+          when: ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('20.04', '>=')
+
+        - name: Import MongoDB public GPG Key
+          apt_key:
+            url: https://www.mongodb.org/static/pgp/server-5.0.asc
+            state: present
+
+        - name: Add MongoDB repository
+          apt_repository:
+            repo: deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/5.0 multiverse
+            state: present
+            filename: mongodb-org-5.0.list
+
+        - name: Update package cache
+          apt:
+            update_cache: yes
+
+        - name: Install libssl1.1
+          apt:
+            name: libssl1.1
+            state: present
+
+        - name: Install MongoDB
+          apt:
+            name: mongodb-org
+            state: present
+
+      rescue:
+        - name: Display error if installation fails
+          debug:
+            msg: "Failed to install MongoDB. Please check your system configuration and network connection."
+
