@@ -1,0 +1,142 @@
+---
+- name: Configure VPN Connection
+  hosts: nooch
+  remote_user: ubuntu
+  become: yes
+  vars_files:
+    - vars/main.yml
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: install pip
+      apt:
+        name: python3-pip
+        state: present
+
+    - name: install libffi7
+      apt:
+        name: libffi7
+        state: present
+
+    - name: Check to see if MongoDB is installed and enabled
+      command: which mongod
+      register: mongo_path
+      ignore_errors: true
+
+    - name: Set mongo_status based on command output
+      set_fact:
+        mongo_status: "{{ mongo_path.stdout | length > 0 }}"
+
+    - name: Display MongoDB status
+      debug:
+        var: mongo_status
+
+    - name: Configure MongoDB repository and install
+      become: yes
+      when: not mongo_status
+      block:
+        - name: Add libssl1.1 repository
+          apt_repository:
+            repo: deb http://security.ubuntu.com/ubuntu focal-security main
+            state: present
+            filename: focal-security.list
+          when: ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('20.04', '>=')
+
+        - name: Import MongoDB public GPG Key
+          apt_key:
+            url: https://www.mongodb.org/static/pgp/server-5.0.asc
+            state: present
+
+        - name: Add MongoDB repository
+          apt_repository:
+            repo: deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/5.0 multiverse
+            state: present
+            filename: mongodb-org-5.0.list
+
+        - name: Update package cache
+          apt:
+            update_cache: yes
+
+        - name: Install libssl1.1
+          apt:
+            name: libssl1.1
+            state: present
+
+        - name: Install MongoDB
+          apt:
+            name: mongodb-org
+            state: present
+
+      rescue:
+        - name: Display error if installation fails
+          debug:
+            msg: "Failed to install MongoDB. Please check your system configuration and network connection."
+
+    - name: Check if Pritunl is installed
+      command: which pritunl
+      register: pritunl_path
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Set pritunl_status based on command output
+      set_fact:
+        pritunl_status: "{{ pritunl_path.stdout | length > 0 }}"
+
+    - name: Display Pritunl status
+      debug:
+        var: pritunl_status
+
+    - name: Configure Pritunl repository and install
+      become: yes
+      when: not pritunl_status
+      block:
+        - name: Install software-properties-common
+          apt:
+            name: software-properties-common
+            state: present
+            update_cache: yes
+
+        - name: Add Pritunl repository
+          apt_repository:
+            repo: deb https://repo.pritunl.com/stable/apt focal main
+            state: present
+            filename: pritunl.list
+
+        - name: Update apt cache
+          apt:
+            update_cache: yes
+
+        - name: Install Pritunl
+          apt:
+            name: pritunl
+            state: present
+
+      rescue:
+        - name: Display error if installation fails
+          debug:
+            msg: "Failed to install Pritunl. Please check your system configuration and network connection."
+
+    - name: Enable Pritunl service
+      service:
+        name: pritunl
+        enabled: yes
+        state: started
+      become: yes
+      when: pritunl_status or not ansible_check_mode
+
+    - name: Verify Pritunl service status
+      command: service pritunl status
+      register: pritunl_service_status
+      become: yes
+      when: pritunl_status or not ansible_check_mode
+
+    - name: Display Pritunl service status
+      debug:
+        var: pritunl_service_status
+      when: pritunl_status or not ansible_check_mode
+
+
+
